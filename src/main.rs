@@ -14,7 +14,7 @@ mod serial;
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
     println!("{}", info);
-    loop {}
+    scrap_os::hlt_loop();
 }
 
 #[cfg(test)]
@@ -80,13 +80,10 @@ pub extern "C" fn _start() -> ! {
 
     scrap_os::init();
 
-    unsafe {
-        *(0xdeadbeef as *mut u8) = 42;
-    };
 
     #[cfg(test)]
     test_main();
 
     println!("It did not crash!");
-    loop {}
+    scrap_os::hlt_loop();
 }
