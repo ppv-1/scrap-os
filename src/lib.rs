@@ -1,37 +1,21 @@
 #![no_std]
-#![no_main]
+
+#![cfg_attr(test, no_main)]
 #![feature(custom_test_frameworks)]
-#![test_runner(scrap_os::test_runner)]
+#![test_runner(crate::test_runner)]
 #![reexport_test_harness_main = "test_main"]
 
 use core::panic::PanicInfo;
 
-mod vga_buffer;
-mod serial;
-
-// This function is called on panic.
-#[cfg(not(test))]
-#[panic_handler]
-fn panic(info: &PanicInfo) -> ! {
-    println!("{}", info);
-    loop {}
-}
-
-#[cfg(test)]
-#[panic_handler]
-fn panic(info: &PanicInfo) -> ! {
-    serial_println!("[failed]\n");
-    serial_println!("Error: {}\n", info);
-    exit_qemu(QemuExitCode::Failed);
-    loop {}
-}
+pub mod serial;
+pub mod vga_buffer;
 
 pub trait Testable {
     fn run(&self) -> ();
 }
 
 impl<T> Testable for T
-where 
+where
     T: Fn(),
 {
     fn run(&self) {
@@ -41,20 +25,33 @@ where
     }
 }
 
-// This function is our test runner.
-#[cfg(test)]
 pub fn test_runner(tests: &[&dyn Testable]) {
     serial_println!("Running {} tests", tests.len());
     for test in tests {
         test.run();
     }
-
     exit_qemu(QemuExitCode::Success);
 }
 
-#[test_case]
-fn trivial_assertion() {
-    assert_eq!(1, 1);
+pub fn test_panic_handler(info: &PanicInfo) -> ! {
+    serial_println!("[failed]\n");
+    serial_println!("Error: {}\n", info);
+    exit_qemu(QemuExitCode::Failed);
+    loop {}
+}
+
+/// Entry point for `cargo test`
+#[cfg(test)]
+#[no_mangle]
+pub extern "C" fn _start() -> ! {
+    test_main();
+    loop {}
+}
+
+#[cfg(test)]
+#[panic_handler]
+fn panic(info: &PanicInfo) -> ! {
+    test_panic_handler(info)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -71,14 +68,4 @@ pub fn exit_qemu(exit_code: QemuExitCode) {
         let mut port = Port::new(0xf4);
         port.write(exit_code as u32);
     }
-}
-
-// This is our entry point.
-#[no_mangle]
-pub extern "C" fn _start() -> ! {
-    println!("hello world{}", "!");
-
-    #[cfg(test)]
-    test_main();
-    loop {}
 }
